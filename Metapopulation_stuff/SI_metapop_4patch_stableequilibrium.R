@@ -1,0 +1,190 @@
+rm(list = ls())
+
+require(deSolve)   
+require(rootSolve)
+require(FME)
+require(ggplot2)
+#setwd("C:/Users/fortinlab/Dropbox/Courses/2016-2017/EEB1451 - Disease in Communities/Term_paper/R")
+###################TABLE OF CONTENTS
+
+###[1] Setting up the model
+###[2] Running model
+
+################################################################################################################################################
+################################################################################################################################################
+################################################################################################################################################
+################################################################################################################################################
+### [1] Setting up the model
+
+##### Model description  #####
+SISmodel=function(t,y,parameters) 
+{ 
+  ## Variables
+  S1=y[1]; I1=y[2]; S2=y[3]; I2=y[4]; S3=y[5]; I3=y[6]; S4=y[7]; I4=y[8];
+  
+  ## Parameters
+  p = parameters[1];
+  K = parameters[2];
+  beta = parameters[3];
+  mu = parameters[4];
+  alpha = parameters[5];
+  m = parameters[6];
+  im = parameters[7]
+  
+  ## Ordinary differential equations
+  #Patch1
+  logistic_growth1 <- (1 - (S1 + I1)/K)
+  dS1dt <- p*(S1+I1)*logistic_growth1 - beta*S1*I1 - S1*mu - S1*m + S2*m #migration
+
+  dI1dt <- beta*S1*I1 - I1*(alpha + mu) - I1*im + I2*im #migration
+  
+  #Patch2
+  logistic_growth2 <- (1 - (S2 + I2)/K)
+  dS2dt <- p*(S2+I2)*logistic_growth2 - beta*S2*I2 - S2*mu - 2*S2*m + S1*m + S3*m #migration
+  
+  dI2dt <- beta*S2*I2 - I2*(alpha + mu) - 2*I2*im + I1*im +I3*im #migration
+  
+  #Patch3
+  logistic_growth3 <- (1 - (S3 + I3)/K)
+  dS3dt <- p*(S3+I3)*logistic_growth3 - beta*S3*I3 - S3*mu - 2*S3*m + S2*m + S4*m #migration
+  
+  dI3dt <- beta*S3*I3 - I3*(alpha + mu) - 2*I3*im + I2*im + I4*im #migration
+  
+  #Patch4
+  logistic_growth4 <- (1 - (S4 + I4)/K)
+  dS4dt <- p*(S4+I4)*logistic_growth4 - beta*S4*I4 - S4*mu - S4*m + S3*m #migration
+  
+  dI4dt <- beta*S4*I4 - I4*(alpha + mu) - I4*im + I3*im #migration
+  
+  
+  return(list(c(dS1dt,
+                dI1dt,
+                dS2dt,
+                dI2dt,
+                dS3dt,
+                dI3dt,
+                dS4dt,
+                dI4dt)));
+  }  
+
+## Initial state
+variables0=c(S1=100, I1=1, S2=0, I2=0, S3=0, I3=0, S4=0, I4=0) #These values don't link up to model, they just represent first 2 equations
+
+## Times at which estimates of the variables are returned
+timevec=seq(0,200,1)
+
+
+################################################################################################################################################
+################################################################################################################################################
+################################################################################################################################################
+################################################################################################################################################
+### [1] Describing parameters
+
+###Paramater values (expect p and beta because that's what we're testing)
+p <- 1
+K <- 5000
+mu <- 0.02
+alpha <- 0.2
+m <- 0.01
+im <- 0.001
+
+#Looping to get range of beta values
+Beta_values <- seq(0.01, 0.1, by = 0.01)
+
+#constant describing relationship to beta
+p_constant <- 2
+m_constant <- 1
+beta_exp <- 1
+
+#and for equilibrium values
+Suscep_num1 <- NULL
+Infect_num1 <- NULL
+Suscep_num2 <- NULL
+Infect_num2 <- NULL
+Suscep_num3 <- NULL
+Infect_num3 <- NULL
+Suscep_num4 <- NULL
+Infect_num4 <- NULL
+
+m <- 0
+im <- 0
+
+for (i in Beta_values){
+  beta <- i
+  p <- p_constant*(beta^beta_exp)
+  #m <- m_constant*beta
+  
+  parameters=c(p,
+             K,
+             beta,
+             mu,
+             alpha,
+             m,
+             im
+             )
+  
+  steadyState=runsteady(y = variables0, 
+                        fun = SISmodel, 
+                        parms = parameters)
+  
+  Suscep1 <- steadyState$y[1]
+  Suscep_num1 <- append(Suscep_num1, Suscep1)
+  
+  Infect1 <- steadyState$y[2]
+  Infect_num1 <- append(Infect_num1, Infect1)
+  
+  Suscep2 <- steadyState$y[3]
+  Suscep_num2 <- append(Suscep_num2, Suscep2)
+  
+  Infect2 <- steadyState$y[4]
+  Infect_num2 <- append(Infect_num2, Infect2)
+  
+  Suscep3 <- steadyState$y[5]
+  Suscep_num3 <- append(Suscep_num3, Suscep3)
+  
+  Infect3 <- steadyState$y[6]
+  Infect_num3 <- append(Infect_num3, Infect3)
+  
+  Suscep4 <- steadyState$y[7]
+  Suscep_num4 <- append(Suscep_num4, Suscep4)
+  
+  Infect4 <- steadyState$y[8]
+  Infect_num4 <- append(Infect_num4, Infect4)
+  
+  }
+
+#Getting data into dataframe for plotting - figure out how to do in one line
+tempdf <- cbind(Beta_values, Suscep_num1, Infect_num1, Suscep_num2, Infect_num2, Suscep_num3, Infect_num3, Suscep_num4, Infect_num4)
+Metapop_equil <- as.data.frame(tempdf, row.names = T)
+Metapop_equil$Suscep_sum <- (Metapop_equil$Suscep_num1 + Metapop_equil$Suscep_num2 + Metapop_equil$Suscep_num3 + Metapop_equil$Suscep_num4)
+
+
+#Finding optimal beta value for susceptibles
+Opt.row <- which(Metapop_equil$Suscep_num1 == max(Metapop_equil$Suscep_num1), arr.ind=TRUE)
+Opt.beta.value <- Metapop_equil$Beta_values[Opt.row]
+
+Opt.Infect.beta <- which(Metapop_equil$Infect_num1 == max(Metapop_equil$Infect_num1), arr.ind=TRUE)
+Opt.Infect.beta <- Metapop_equil$Beta_values[Opt.Infect.beta]
+View(Metapop_equil)
+
+plot_title <- paste0("Optimal S Beta value =", Opt.beta.value, ", alpha =", alpha, ", p =", p_constant, ", m =", m_constant)
+plot_title
+
+
+Metapop_plot <- ggplot(Metapop_equil, aes(Beta_values)) +
+  geom_line(aes(y = Suscep_num1, colour = "Susceptibles equilibrium")) + 
+  geom_line(aes(y = Infect_num1, colour = "Infecteds equilibrium")) +
+  labs(title = plot_title, x = "Beta", y = "Population size")
+
+Metapop_plot + theme(
+  plot.title = element_text(size = 16), 
+  axis.text = element_text(size = 16),
+  axis.title = element_text(size = 16),
+  axis.line = element_line("black"),
+  legend.title = element_blank(),
+  panel.background = element_blank()
+)
+
+#Write out plots
+ggsave(paste0("./plots/SI_4metapop/Equilibrium_values/", plot_title, ".png"), width=8, height=4)
+
